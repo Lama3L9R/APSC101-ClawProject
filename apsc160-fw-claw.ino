@@ -28,27 +28,33 @@ bool taskMainAppInit() {
 }
 
 void taskMainAppCallback() {
-  uint32_t result = sr04DoMeasureSafe(&sonarDriver);
+  // uint32_t result = sr04DoMeasureSafe(&sonarDriver);
+  uint32_t result = 0;
 
   if ((result & SR04_INVALID_VALUE) == 0 && result != 0) {
-    LOG("[App] Stablized Reading: %lu", result);
+    // LOG("[App] Stablized Reading: %lu", result);
 
     if (result < 300) {
       pwmConfig(&sg90Driver, PWM_CNF_POSITIVE, 2000);
+    } else {
+      pwmConfig(&sg90Driver, PWM_CNF_POSITIVE, 1000);
     }
   } else { /* We drop the result if invalid */ }
 }
 
 bool taskPWMInit() {
-  utilsClearMemory(&sonarDriver, sizeof(struct PWMDriver));
+  utilsClearMemory(&sg90Driver, sizeof(struct PWMDriver));
 
-/*
   pwmConfig(&sg90Driver, PWM_CNF_PIN, CONF_SG90_PIN_PWM);
   pwmConfig(&sg90Driver, PWM_CNF_PERIOD, 20000);
   pwmConfig(&sg90Driver, PWM_CNF_POSITIVE, 1000);
-*/
 
-  sg90Driver->
+/*
+  sg90Driver.counter = 0;
+  sg90Driver.period = 1000;
+  sg90Driver.positive = 500;
+  sg90Driver.pin = 9;
+*/
 
   if (Serial.available()) {
     LOG("[PWM] Initialized")
@@ -57,13 +63,15 @@ bool taskPWMInit() {
   return true;
 }
 
-void taskPWMCallback() {
-  //pwmTick(&sg90Driver);
-  LOG("??")
-}
+void taskPWMCallback();
 
 static Task taskMainApp(TASK_IMMEDIATE, TASK_FOREVER, &taskMainAppCallback, &ts, true, &taskMainAppInit, NULL);
-static Task taskPWM(1000, TASK_FOREVER, &taskPWMCallback, &ts, true, &taskPWMInit, NULL);
+static Task taskPWM(1, TASK_FOREVER, &taskPWMCallback, &ts, true, &taskPWMInit, NULL);
+
+void taskPWMCallback() {
+  LOG_D("[PWM] Tick count = %lu, period = %lu, positive = %lu", sg90Driver.counter, sg90Driver.period, sg90Driver.positive)
+  pwmTick(&sg90Driver);
+}
 
 void sr04TaskDelay(uint32_t ms) {
   taskMainApp.delay(ms * 1000);
