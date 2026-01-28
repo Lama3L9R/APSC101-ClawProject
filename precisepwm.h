@@ -8,12 +8,12 @@
 #define PWM_CNF_COUNTER_RESET (1 << 3)
 
 struct PWMDriver {
-  uint8_t pin;
-
-  uint32_t counter;
-  uint32_t period;
-  uint32_t positive;
+    uint8_t pin;
+  
+    uint32_t counter;
+    uint32_t period;
+    uint32_t positive;
 };
 
-void pwmConfig(struct PWMDriver* drv, uint8_t conf, ...);
+int pwmConfig(struct PWMDriver* drv, uint8_t conf, ...);
 void pwmTick(struct PWMDriver* drv);
