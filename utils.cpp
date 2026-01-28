@@ -10,8 +10,8 @@ void writeSerialConsole(const char* fmt, ...) {
     va_start(orgi, fmt);
     va_copy(data, orgi);
 
-    char buff[150] = { 0 };
-    vsnprintf(buff, 150, fmt, data);
+    char buff[500] = { 0 };
+    vsnprintf(buff, 500, fmt, data);
 
     Serial.println(buff);
 
