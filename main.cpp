@@ -40,25 +40,6 @@ static Task taskPWM(1, TASK_FOREVER, &taskPWMCallback, &ts, true, &taskPWMInit, 
 
 static Task taskSR04(10 * 1000, 6, &taskSR04SonarUpdateCallback, &ts, false, NULL, &taskSR04SonarOnUpdateDone);
 
-bool appInit() {
-    LOG("")
-    LOG("    ______                 __ ___ ");
-    LOG("   /_  __/__ ___ ___ _  __ / /_  |");
-    LOG("    / / / -_) _ `/  ' \\/ // / __/ ");
-    LOG("   /_/  \\__/\\_,_/_/_/_/\\___/____/ ");
-    LOG("")
-                               
-    LOG("[App] Main app initialized")
-
-    utilsClearMemory(&sonarDriver, sizeof(struct SR04Driver));
-    sr04Initialize(&sonarDriver, CONF_SR04_PIN_ECHO, CONF_SR04_PIN_TRIG);
-
-    /* We start to take measurements */
-    taskSR04.enable();
-
-    return true;
-}
-
 #if USE_PRECISE_PWM
 bool taskPWMInit() {
     utilsClearMemory(&sg90Driver, sizeof(struct PWMDriver));
@@ -80,6 +61,8 @@ void taskSR04SonarUpdateCallback() {
     
     if ((value & SR04_INTERNAL_ERROR) != 0) {
         sonarStablizedDistance = SR04_INTERNAL_ERROR;
+
+        LOG("[SR04] Error while taking measurements!")
     }
 
     sonarDistanceSamples[taskSR04.getRunCounter()] = value;
@@ -88,7 +71,7 @@ void taskSR04SonarUpdateCallback() {
 void taskSR04SonarOnUpdateDone() {
     double r2 = 0;
     double avg = 0;
-    uint32_t fuckedValue = 0;
+    uint32_t roundedValue = 0;
     uint32_t validValues = 0;
 
     for (uint8_t i = 0; i < 6; i ++) {
@@ -116,46 +99,39 @@ void taskSR04SonarOnUpdateDone() {
     }
 
     r2 /= avg * avg;
-    fuckedValue = (uint32_t) avg;
+    roundedValue = (uint32_t) avg;
 
-#if DEBUG
     LOG_D_NLB("[SR04] ");
-#endif
 
-    if (r2 > 1) {
-#if DEBUG
+    if (r2 > 1.7) {
         LOG_D_NLB("[ERR_INVALID] ")
-#else
+
         sonarStablizedDistance = SR04_INVALID_VALUE;
         goto done;
-#endif
     }
 
-    if (fuckedValue < 10) {
-#if DEBUG
+    if (roundedValue < 10) {
         LOG_D_NLB("[ERR_FIXUP_TOOSMALL] ")
-#else
+
         sonarStablizedDistance = SR04_INVALID_VALUE;
         goto done;
-#endif
     }
 
-    if (fuckedValue > 140000) {
-#if DEBUG
+    if (roundedValue > 140000) {
         LOG_D_NLB("[ERR_FIXUP_TOOBIG] ")
-#else
         sonarStablizedDistance = SR04_INVALID_VALUE;
         goto done;
-#endif
     }
-
-#if DEBUG
-    LOG_D("R2 = %lf, AVG (Fucked) = %lu", r2, fuckedValue)
-#endif
 
     sonarStablizedDistance = avg;
 
 done:
+    LOG_D_NLB("R2 = ");
+#if DEBUG
+    Serial.print(r2); /* For some reason, %lf will format a double into '?'*/
+#endif
+    LOG_D(", AVG (Rounded) = %lu", roundedValue)
+
     taskMainApp.enable();
     taskMainApp.restart();
 }
@@ -170,39 +146,70 @@ void appPWMSetPositive(unsigned int amount) {
 }
 
 void taskMainAppCallback() {
-    LOG("[App] Stablized Reading: %lu", sonarStablizedDistance);
+    bool flCloseState = flClosed;
+
+    LOG_D("[App] Stablized Reading: %lu", sonarStablizedDistance);
     if ((sonarStablizedDistance & SR04_INVALID_VALUE) == 0 && sonarStablizedDistance != 0) {
         if (sonarStablizedDistance < 500) {
             if (!flClosed) {
-                appPWMSetPositive(CONF_ANG_OPEN);
-                flClosed = !flClosed;
-            } else {
+                LOG("[App] Reached criticle level of %lu! Do CLOSE now.", sonarStablizedDistance)
+
                 appPWMSetPositive(CONF_ANG_CLOSED);
                 flClosed = !flClosed;
+            } else {
+                LOG("[App] Reached criticle level of %lu! With flag SET! Do OPEN now.", sonarStablizedDistance)
+
+                appPWMSetPositive(CONF_ANG_OPEN);
+                flClosed = !flClosed;
             }
-        } else {
-            appPWMSetPositive(CONF_ANG_CLOSED);
         }
     } else { /* We drop the result if invalid */ }
 
-    taskSR04.restart();
-    taskSR04.enable();
+    if (flCloseState != flClosed) {
+        LOG("[App] WAIT for some time to take measurements again");
+        taskSR04.restartDelayed(CONF_CLAW_SWITCH_DELAY);
+    } else {
+        taskSR04.restart();
+    }
+
+    // taskSR04.enable();
 }
 
 void setup() {
     Serial.begin(115200); 
 
+    LOG("")
+    LOG("    ______                  _____");
+    LOG("   /_  __/__ ___ ___ _  __ / /_  |");
+    LOG("    / / / -_) _ `/  ' \\/ // / __/");
+    LOG("   /_/  \\__/\\_,_/_/_/_/\\___/____/");
+    LOG("")
+
     /* My EYES! GET RID OF ALL THESE LEDS */
     pinMode(LED_BUILTIN, OUTPUT);
-    digitalWrite(LED_BUILTIN, 0);
+    digitalWrite(LED_BUILTIN, 1);
     
     pinMode(9, OUTPUT);
     TCCR1A = _BV(COM1A1) | _BV(COM1B1);
     TCCR1B = _BV(WGM13) | _BV(CS11);
     ICR1 = 19999;
-    OCR1B = 1000;
+    OCR1B = 1300;
 
-    appInit();
+    appPWMSetPositive(300);
+    delay(1000);
+    appPWMSetPositive(2000);
+
+    LOG("[App] CHECK Motor  OK")
+
+    digitalWrite(LED_BUILTIN, 0);
+
+    utilsClearMemory(&sonarDriver, sizeof(struct SR04Driver));
+    sr04Initialize(&sonarDriver, CONF_SR04_PIN_ECHO, CONF_SR04_PIN_TRIG);
+
+    /* We start to take measurements */
+    taskSR04.enable();
+
+    LOG("[App] Main app initialized")
 }
 
 void loop() { 
