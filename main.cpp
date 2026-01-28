@@ -20,6 +20,8 @@ static struct PWMDriver sg90Driver = { 0 };
 static uint32_t sonarStablizedDistance = 0;
 static uint32_t sonarDistanceSamples[6] = { 0 };
 
+static bool flClosed = false;
+
 void taskMainAppCallback();
 
 #if USE_PRECISE_PWM
@@ -171,9 +173,15 @@ void taskMainAppCallback() {
     LOG("[App] Stablized Reading: %lu", sonarStablizedDistance);
     if ((sonarStablizedDistance & SR04_INVALID_VALUE) == 0 && sonarStablizedDistance != 0) {
         if (sonarStablizedDistance < 500) {
-            appPWMSetPositive(1100);
+            if (!flClosed) {
+                appPWMSetPositive(CONF_ANG_OPEN);
+                flClosed = !flClosed;
+            } else {
+                appPWMSetPositive(CONF_ANG_CLOSED);
+                flClosed = !flClosed;
+            }
         } else {
-            appPWMSetPositive(1900);
+            appPWMSetPositive(CONF_ANG_CLOSED);
         }
     } else { /* We drop the result if invalid */ }
 
