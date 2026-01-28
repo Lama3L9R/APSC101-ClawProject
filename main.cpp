@@ -185,10 +185,10 @@ void setup() {
     LOG("   /_/  \\__/\\_,_/_/_/_/\\___/____/");
     LOG("")
 
-    /* My EYES! GET RID OF ALL THESE LEDS */
     pinMode(LED_BUILTIN, OUTPUT);
     digitalWrite(LED_BUILTIN, 1);
     
+    /* Dark magic xD (Hardware Timer1 Setup) */
     pinMode(9, OUTPUT);
     TCCR1A = _BV(COM1A1) | _BV(COM1B1);
     TCCR1B = _BV(WGM13) | _BV(CS11);
@@ -201,8 +201,10 @@ void setup() {
 
     LOG("[App] CHECK Motor  OK")
 
+    /* LED OFF indicates check OK */
     digitalWrite(LED_BUILTIN, 0);
 
+    /* Initialize SR04 Sonar Sensor */
     utilsClearMemory(&sonarDriver, sizeof(struct SR04Driver));
     sr04Initialize(&sonarDriver, CONF_SR04_PIN_ECHO, CONF_SR04_PIN_TRIG);
 
