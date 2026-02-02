@@ -20,7 +20,7 @@ static struct PWMDriver sg90Driver = { 0 };
 static uint32_t sonarStablizedDistance = 0;
 static uint32_t sonarDistanceSamples[6] = { 0 };
 
-static bool flClosed = false;
+static bool flHasObject = false;
 
 void taskMainAppCallback();
 
@@ -145,34 +145,37 @@ void appPWMSetPositive(unsigned int amount) {
     OCR1A = amount;
 }
 
+bool appDistanceValid(uint32_t value) {
+    return (sonarStablizedDistance & SR04_INVALID_VALUE) == 0 && sonarStablizedDistance != 0;
+}
+
 void taskMainAppCallback() {
-    bool flCloseState = flClosed;
-
     LOG_D("[App] Stablized Reading: %lu", sonarStablizedDistance);
-    if ((sonarStablizedDistance & SR04_INVALID_VALUE) == 0 && sonarStablizedDistance != 0) {
-        if (sonarStablizedDistance < 500) {
-            if (!flClosed) {
-                LOG("[App] Reached criticle level of %lu! Do CLOSE now.", sonarStablizedDistance)
 
-                appPWMSetPositive(CONF_ANG_CLOSED);
-                flClosed = !flClosed;
-            } else {
-                LOG("[App] Reached criticle level of %lu! With flag SET! Do OPEN now.", sonarStablizedDistance)
-
-                appPWMSetPositive(CONF_ANG_OPEN);
-                flClosed = !flClosed;
-            }
-        }
-    } else { /* We drop the result if invalid */ }
-
-    if (flCloseState != flClosed) {
-        LOG("[App] WAIT for some time to take measurements again");
-        taskSR04.restartDelayed(CONF_CLAW_SWITCH_DELAY);
-    } else {
+    if (!appDistanceValid(sonarStablizedDistance)) {
         taskSR04.restart();
+        return;
     }
 
-    // taskSR04.enable();
+    bool flState = flHasObject;
+
+    if (sonarStablizedDistance <= CONF_CLAW_RELEASE_THRESHOLD) {
+        LOG("[App] Reached criticle level of %lu! Do OPERATION now.", sonarStablizedDistance)
+
+        appPWMSetPositive(CONF_ANG_OPEN);
+    
+        delay(2000);
+        
+        appPWMSetPositive(CONF_ANG_CLOSED);
+
+        delay(3000);
+
+        flHasObject = false;
+    }
+
+    taskSR04.restart();
+
+
 }
 
 void setup() {
@@ -195,9 +198,10 @@ void setup() {
     ICR1 = 19999;
     OCR1B = 1300;
 
-    appPWMSetPositive(300);
-    delay(1000);
     appPWMSetPositive(2000);
+    delay(3000);
+    appPWMSetPositive(300);
+
 
     LOG("[App] CHECK Motor  OK")
 
