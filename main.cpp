@@ -164,7 +164,7 @@ void taskMainAppCallback() {
 
         appPWMSetPositive(CONF_ANG_OPEN);
     
-        delay(2000);
+        delay(3500);
         
         appPWMSetPositive(CONF_ANG_CLOSED);
 
